@@ -1,4 +1,4 @@
-#![crate_name = "fhe_str"]
+#![crate_name = "fhe_string"]
 #![feature(stmt_expr_attributes)]
 
 

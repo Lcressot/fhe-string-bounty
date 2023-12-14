@@ -7,7 +7,6 @@ use serde::{Serialize, Deserialize};
 use crate::ciphertext::FheString;
 use tfhe::integer::ciphertext::RadixCiphertext;
 
-
 #[derive(Serialize, Deserialize, Clone)]
 pub struct ClientKey{
     key: RadixClientKey,
@@ -39,9 +38,10 @@ impl ClientKey{
         fhe_string.decrypt(&self.key)
     }
 
-    pub fn encrypt_bool(&self, boolean: &bool) -> RadixCiphertext{
-        self.key.encrypt(*boolean as u8)
-    }
+    pub fn decrypt_to_string(&self, fhe_string: &FheString) -> String{
+        assert!(fhe_string.is_encrypted(), "FheString should be encrypted");
+        fhe_string.decrypt(&self.key).to_string()
+    }    
 
     pub fn decrypt_bool(&self, fhe_boolean: &RadixCiphertext) -> bool {
         self.key.decrypt::<u8>(fhe_boolean) == 1

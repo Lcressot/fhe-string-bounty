@@ -1,6 +1,7 @@
 //! ServerKey implementation of str::contains related functions forciphertext::FheString objects
 
 use tfhe::integer::ciphertext::RadixCiphertext;
+use tfhe::integer::BooleanBlock;
 use rayon::prelude::*;
 
 use crate::ciphertext::{FheString, FheAsciiChar};
@@ -136,8 +137,8 @@ impl ServerKey{
                 slice_2,
                 |(c, fhe_c): (&char, &FheAsciiChar)|{
                     let (is_equal, second_is_null) = rayon::join(
-                        || self.key.scalar_eq_parallelized(fhe_c.unwrap(), (*c) as u8),
-                        || self.key.scalar_eq_parallelized(fhe_c.unwrap(), 0u8)
+                        || self.key.scalar_eq_parallelized(fhe_c.unwrap(), (*c) as u8).into_radix(1, &self.key),
+                        || self.key.scalar_eq_parallelized(fhe_c.unwrap(), 0u8).into_radix(1, &self.key)
                     );
                     self.key.bitor_parallelized(&is_equal, &second_is_null)
                 });
@@ -158,8 +159,8 @@ impl ServerKey{
             slice_2,
             |(fhe_c_1, fhe_c_2): (&FheAsciiChar, &FheAsciiChar)|{
                 let (is_equal, second_is_null) = rayon::join(
-                    || self.key.eq_parallelized(fhe_c_1.unwrap(), fhe_c_2.unwrap()),
-                    || self.key.scalar_eq_parallelized(fhe_c_2.unwrap(), 0u8)
+                    || self.key.eq_parallelized(fhe_c_1.unwrap(), fhe_c_2.unwrap()).into_radix(1, &self.key),
+                    || self.key.scalar_eq_parallelized(fhe_c_2.unwrap(), 0u8).into_radix(1, &self.key)
                 );
                 self.key.bitor_parallelized(&is_equal, &second_is_null)
             });
@@ -258,7 +259,7 @@ impl ServerKey{
                         // wether contains at index:
                         let contains_at_index = self.contains_at_index_no_padding(fhe_string, pattern, index);
                         // wether the rest is null, i.e hidden_len_1 <= index + len_2 :
-                        let rest_null = self.key.scalar_le_parallelized(&hidden_len_1, (len_2 + index) as u64);
+                        let rest_null = self.key.scalar_le_parallelized(&hidden_len_1, (len_2 + index) as u64).into_radix(1, &self.key);
                         // return AND value
                         self.key.bitand_parallelized(&contains_at_index, &rest_null)
                 }).collect();
@@ -288,7 +289,7 @@ impl ServerKey{
                         let mut addition = self.key.add_parallelized(&hidden_len_2, &index_enc);
                         // extend the two variables so they get the same block size
                         self.extend_equally(&mut addition, &mut hidden_len_1_extended);
-                        let rest_null = self.key.ge_parallelized(&addition, &hidden_len_1_extended);
+                        let rest_null = self.key.ge_parallelized(&addition, &hidden_len_1_extended).into_radix(1, &self.key);
 
                         // return AND value
                         self.key.bitand_parallelized(&contains_at_index, &rest_null)
@@ -371,7 +372,10 @@ impl ServerKey{
         // Correct for the special case where rfind an encrypted empty string with padding, such as "\0\0"
         if reverse & pattern.is_padded(){
             let is_empty = self.is_empty(pattern);
-            index = self.key.if_then_else_parallelized(&is_empty, &self.len(fhe_string), &index);
+            index = self.key.if_then_else_parallelized(
+            	&BooleanBlock::convert::<RadixCiphertext>(&is_empty, &self.key),
+            	&self.len(fhe_string),
+            	&index);
             index_found = self.key.bitor_parallelized(&is_empty, &index_found);
         }
 

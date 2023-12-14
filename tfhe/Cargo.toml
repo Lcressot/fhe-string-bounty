@@ -44,6 +44,7 @@ combine = "4.6.6"
 env_logger = "0.10.0"
 log = "0.4.19"
 # End regex-engine deps
+colored = "2.0"
 
 [build-dependencies]
 cbindgen = { version = "0.26.0", optional = true }

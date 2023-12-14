@@ -1,6 +1,7 @@
 //! ServerKey implementation of replace and replacen functions for ciphertext::FheString objects
 
 use tfhe::integer::ciphertext::{RadixCiphertext, IntegerCiphertext};
+use tfhe::integer::BooleanBlock;
 use rayon::prelude::*;
 
 use crate::ciphertext::{FheString, FheAsciiChar};
@@ -27,15 +28,16 @@ impl ServerKey {
 		vec_1: &Vec<RadixCiphertext>,
 		vec_2: &Vec<RadixCiphertext>)
 	-> Vec<RadixCiphertext>{
+		let bool_condition = BooleanBlock::convert::<RadixCiphertext>(&condition, &self.key);
 		let zero_cst = self.key.create_trivial_zero_radix(NUMBER_OF_BLOCKS);
 		(0..vec_1.len().max(vec_2.len())).into_par_iter().map(
 			|index|{
 				if index >= vec_1.len(){
-					self.key.if_then_else_parallelized(condition, &zero_cst, &vec_2[index])
+					self.key.if_then_else_parallelized(&bool_condition, &zero_cst, &vec_2[index])
 				}else if index >= vec_2.len(){
-					self.key.if_then_else_parallelized(condition, &vec_1[index], &zero_cst)
+					self.key.if_then_else_parallelized(&bool_condition, &vec_1[index], &zero_cst)
 				}else{
-					self.key.if_then_else_parallelized(condition, &vec_1[index], &vec_2[index])
+					self.key.if_then_else_parallelized(&bool_condition, &vec_1[index], &vec_2[index])
 				}
 			}
 		).collect()
@@ -169,9 +171,7 @@ impl ServerKey {
 		     		let len = self.len(fhe_string);
 		     		let mut vec: Vec<RadixCiphertext> = (0..fhe_string.len()).into_par_iter().map(
 				    	|index|{
-				    		let mut res = self.key.scalar_gt_parallelized(&len, index as u64);
-				    		self.key.extend_radix_with_trivial_zero_blocks_msb_assign(&mut res, NUMBER_OF_BLOCKS-1);
-				    		res
+				    		self.key.scalar_gt_parallelized(&len, index as u64).into_radix(NUMBER_OF_BLOCKS, &self.key)
 				    	}
 			    	).collect();
 			    	let mut last_value = self.make_trivial_bool(!replacen);
@@ -272,8 +272,8 @@ impl ServerKey {
 	        );
 
 	        let (mut not_pattern_just_ended, mut pattern_ended) = rayon::join(
-                || self.key.scalar_ne_parallelized(&pattern_start_index_plus_pattern_length, index as u64),
-                || self.key.scalar_le_parallelized(&pattern_start_index_plus_pattern_length, index as u64)
+                || self.key.scalar_ne_parallelized(&pattern_start_index_plus_pattern_length, index as u64).into_radix(1, &self.key),
+                || self.key.scalar_le_parallelized(&pattern_start_index_plus_pattern_length, index as u64).into_radix(1, &self.key)
             );
 
 	        // this value only makes sense if a pattern has started already	        
@@ -283,8 +283,9 @@ impl ServerKey {
 	        // a new pattern starts if we have a first one or a one with pattern_ended
 	        let one_and_pattern_ended = self.key.bitand_parallelized(&contains_at_index_vec[index], &pattern_ended);
 	        let pattern_starts = self.key.bitor_parallelized(&is_first_one, &one_and_pattern_ended);
+	        let bool_pattern_starts = BooleanBlock::convert::<RadixCiphertext>( &pattern_starts, &self.key);
 	        let encrypted_index = self.key.create_trivial_radix(index as u64, n_blocks);
-	        pattern_start_index = self.key.if_then_else_parallelized(&pattern_starts, &encrypted_index, &pattern_start_index);
+	        pattern_start_index = self.key.if_then_else_parallelized(&bool_pattern_starts, &encrypted_index, &pattern_start_index);
 
         	// update pattern_started and not_pattern_just_ended
         	// and
@@ -305,7 +306,7 @@ impl ServerKey {
 	        if replacen{
 	        	let pattern_starts_extended = self.key.extend_radix_with_trivial_zero_blocks_msb(&pattern_starts, n_blocks-1);
 	        	self.key.add_assign_parallelized(&mut sum_pattern_starts, &pattern_starts_extended);
-	        	let sum_pattern_starts_le_n = self.key.scalar_le_parallelized(&sum_pattern_starts, n_times as u64);
+	        	let sum_pattern_starts_le_n = self.key.scalar_le_parallelized(&sum_pattern_starts, n_times as u64).into_radix(1, &self.key);
 
 	        	let (pattern_starts_n, pattern_started_n) = rayon::join(
 	        		|| self.key.bitand_parallelized(&sum_pattern_starts_le_n, &pattern_starts),
@@ -373,13 +374,13 @@ impl ServerKey {
 				|index|{
 					if fhe_string.is_encrypted(){
 						self.key.if_then_else_parallelized(
-							&is_pattern_vec[index],
+							&BooleanBlock::convert::<RadixCiphertext>(&is_pattern_vec[index], &self.key),
 							&pattern_replaced[index],
 							fhe_string.fhe_chars()[index].unwrap(),
 						)
 					}else{
 						self.key.if_then_else_parallelized(
-							&is_pattern_vec[index],
+							&BooleanBlock::convert::<RadixCiphertext>(&is_pattern_vec[index], &self.key),
 							&pattern_replaced[index],
 							&self.key.create_trivial_radix(fhe_string.chars()[index] as u8, NUMBER_OF_BLOCKS),
 						)
@@ -429,8 +430,8 @@ impl ServerKey {
 
 		    let to_or_zero: Vec<Vec<RadixCiphertext>> = (0..sub_strings.len()-1).into_par_iter().map(
 		    	|index|{
-		    		let mut index_lt_number_of_fields = self.key.scalar_gt_parallelized(&number_of_fields, (index+1) as u64);
-		    		self.key.extend_radix_with_trivial_zero_blocks_msb_assign(&mut index_lt_number_of_fields, NUMBER_OF_BLOCKS-1);
+		    		let mut index_lt_number_of_fields = self.key.scalar_gt_parallelized(
+		    			&number_of_fields, (index+1) as u64).into_radix(NUMBER_OF_BLOCKS, &self.key);
 		    		(0..to.len()).into_par_iter().map(
 		     			|sub_index| self.key.mul_parallelized(&index_lt_number_of_fields, &to_encrypted_values[sub_index])
 		     		).collect()

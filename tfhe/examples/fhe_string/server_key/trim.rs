@@ -17,7 +17,7 @@ impl ServerKey{
     	let eq_char = | character: char | {
 			self.apply_parallelized_vec(
 	            fhe_string.fhe_chars(),
-	            |c: &FheAsciiChar| self.key.scalar_eq_parallelized(c.unwrap(), character as u8)
+	            |c: &FheAsciiChar| self.key.scalar_eq_parallelized(c.unwrap(), character as u8).into_radix(1, &self.key)
 	        ) 		
     	};
 
@@ -76,7 +76,7 @@ impl ServerKey{
 		    	// compute if values are zero:
 	        	let is_zero = self.apply_parallelized_vec(
 	            	fhe_string.fhe_chars(),
-	            	|c: &FheAsciiChar| self.key.scalar_eq_parallelized(c.unwrap(), 0u8)
+	            	|c: &FheAsciiChar| self.key.scalar_eq_parallelized(c.unwrap(), 0u8).into_radix(1, &self.key)
 	            );
 
 	        	// fill is_whitespace with ones for the ending padding values and whitespace characters' indices
@@ -120,7 +120,7 @@ impl ServerKey{
 	        	|index|{
 	        		let only_ones_before_save = only_ones_before.clone();
         			self.key.bitand_assign_parallelized(&mut only_ones_before, &is_whitespace[index]);
-        			is_whitespace[index] = self.key.ne_parallelized(&only_ones_before, &only_ones_before_save);
+        			is_whitespace[index] = self.key.ne_parallelized(&only_ones_before, &only_ones_before_save).into_radix(1, &self.key);
         		}
     		);
 
@@ -326,7 +326,7 @@ impl ServerKey{
 		    	// avoid computing for values that cannot be part of the prefix with visible_len
 		    	(0..visible_len).into_par_iter().map(
 		    		|index|{
-		    			let mut is_gt = self.key.scalar_gt_parallelized(&shift_index, index as u64);
+		    			let mut is_gt: RadixCiphertext = self.key.scalar_gt_parallelized(&shift_index, index as u64).into_radix(1, &self.key);
 		    			let n_blocks = is_gt.blocks().len()-1;
 		    			self.key.trim_radix_blocks_msb_assign(&mut is_gt, n_blocks); // trim to one block
 		    			self.key.bitand_parallelized(&is_gt, &starts_with) // don't remove anything if the prefix was not found
@@ -427,7 +427,7 @@ impl ServerKey{
 			// avoid computing for values that cannot be part of the prefix with visible_len
 	    	let mut index_vec: Vec<RadixCiphertext> = (0..visible_len).into_par_iter().map(
 	    		|index|{
-	    			let mut is_eq = self.key.scalar_eq_parallelized(&shift_index, index as u64);
+	    			let mut is_eq: RadixCiphertext = self.key.scalar_eq_parallelized(&shift_index, index as u64).into_radix(1, &self.key);
 	    			let n_blocks = is_eq.blocks().len()-1;
 	    			self.key.trim_radix_blocks_msb_assign(&mut is_eq, n_blocks); // trim to one block
 	    			self.key.bitand_parallelized(&is_eq, &starts_with) // don't remove anything if the prefix was not found
@@ -504,7 +504,7 @@ impl ServerKey{
 			   	(0..fhe_string.len()).into_par_iter().map(
 		    		|index|{
 		    			// here we need to process all indices because we don't know how much padding there may be
-		    			let mut is_le = self.make_trivial_bool(sufix_start_index <= index);
+		    			let mut is_le: RadixCiphertext = self.make_trivial_bool(sufix_start_index <= index);
 		    			let n_blocks = is_le.blocks().len()-1;
 						self.key.trim_radix_blocks_msb_assign(&mut is_le, n_blocks); // trim to one block		    			
 		    			self.key.bitand_parallelized(&is_le, &ends_with) // don't remove anything if the suffix was not found
@@ -525,7 +525,7 @@ impl ServerKey{
 			   	(0..fhe_string.len()).into_par_iter().map(
 		    		|index|{
 		    			// here we need to process all indices because we don't know how much padding there may be
-		    			let mut is_le = self.key.scalar_le_parallelized(&sufix_start_index, index as u64);
+		    			let mut is_le: RadixCiphertext = self.key.scalar_le_parallelized(&sufix_start_index, index as u64).into_radix(1, &self.key);
 		    			let n_blocks = is_le.blocks().len()-1;
 						self.key.trim_radix_blocks_msb_assign(&mut is_le, n_blocks); // trim to one block
 		    			self.key.bitand_parallelized(&is_le, &ends_with) // don't remove anything if the suffix was not found

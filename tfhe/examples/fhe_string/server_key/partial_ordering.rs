@@ -65,12 +65,12 @@ impl ServerKey{
 					|| self.parallelized_vec_2_bool_function(
 						&fhe_string_a.fhe_chars()[start_a..end_a],
 						&fhe_string_b.chars()[start_b..end_b],
-						|(fhe_c, c)| self.key.scalar_lt_parallelized(fhe_c.unwrap(), (*c) as u8)
+						|(fhe_c, c)| self.key.scalar_lt_parallelized(fhe_c.unwrap(), (*c) as u8).into_radix(1, &self.key)
 					),
 					|| self.parallelized_vec_2_bool_function(
 						&fhe_string_a.fhe_chars()[start_a..end_a],
 						&fhe_string_b.chars()[start_b..end_b],
-						|(fhe_c, c)| self.key.scalar_eq_parallelized(fhe_c.unwrap(), (*c) as u8)
+						|(fhe_c, c)| self.key.scalar_eq_parallelized(fhe_c.unwrap(), (*c) as u8).into_radix(1, &self.key)
 					))
 			},
 			(false, true) => {
@@ -80,12 +80,12 @@ impl ServerKey{
 					|| self.parallelized_vec_2_bool_function(					
 						&fhe_string_b.fhe_chars()[start_b..end_b],
 						&fhe_string_a.chars()[start_a..end_a],
-						|(fhe_c, c)| self.key.scalar_gt_parallelized(fhe_c.unwrap(), (*c) as u8)
+						|(fhe_c, c)| self.key.scalar_gt_parallelized(fhe_c.unwrap(), (*c) as u8).into_radix(1, &self.key)
 					),
 					|| self.parallelized_vec_2_bool_function(
 						&fhe_string_b.fhe_chars()[start_b..end_b],
 						&fhe_string_a.chars()[start_a..end_a],
-						|(fhe_c, c)| self.key.scalar_eq_parallelized(fhe_c.unwrap(), (*c) as u8)
+						|(fhe_c, c)| self.key.scalar_eq_parallelized(fhe_c.unwrap(), (*c) as u8).into_radix(1, &self.key)
 					))
 			},
 			(true, true) => {
@@ -95,12 +95,12 @@ impl ServerKey{
 					|| self.parallelized_vec_2_bool_function(
 						&fhe_string_a.fhe_chars()[start_a..end_a],
 						&fhe_string_b.fhe_chars()[start_b..end_b],
-						|(fhe_c_1, fhe_c_2)| self.key.lt_parallelized(fhe_c_1.unwrap(), fhe_c_2.unwrap())
+						|(fhe_c_1, fhe_c_2)| self.key.lt_parallelized(fhe_c_1.unwrap(), fhe_c_2.unwrap()).into_radix(1, &self.key)
 					),
 					|| self.parallelized_vec_2_bool_function(
 						&fhe_string_a.fhe_chars()[start_a..end_a],
 						&fhe_string_b.fhe_chars()[start_b..end_b],
-						|(fhe_c_1, fhe_c_2)| self.key.eq_parallelized(fhe_c_1.unwrap(), fhe_c_2.unwrap())
+						|(fhe_c_1, fhe_c_2)| self.key.eq_parallelized(fhe_c_1.unwrap(), fhe_c_2.unwrap()).into_radix(1, &self.key)
 					))
 			}
 		};

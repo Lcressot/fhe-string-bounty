@@ -104,11 +104,11 @@ println!("All Ok.");
 
 ## Build
 ```bash
-cargo build --release
+ cargo build --release --example fhe_string
 ```
 
 ## Run
-Create a link with `ln -s ./target/release/fhe-str fhe-str` then run `./fhe-str` with the following parameters:
+Create a link with `ln -s ./target/release/examples/fhe_string fhe-str` then run `./fhe-str` with the following parameters:
 - `--help` or `-h` for help
 - `--string` the string
 - `--padding-string` the padding of the string
@@ -334,6 +334,6 @@ You can run your own tests or use the ones below to make sure everything works.
 
 ## Dev
 Todo: 
-- Use of `BooleanBlock` instead of 1 block `RadixCipherText`, in outputs of functions, and everywhere for performance ?
+- Use of `BooleanBlock` instead of 1 block `RadixCipherText`, in outputs of functions ? This would be better but it would require in the main to convert them back to `RadixCipherText` with the `server_key` before being able to decrypt them with the `client_key`, which does not seem so simple for the user.
 - allow pattern to be a matching function or an array or FheStrings (the array is done for `split_general` which accepts `&[&FheString]` for patterns).
 - warn the user of the speed of the different sub-algorithms in each functions so they know if they should take out padding or encryption for some inputs ?

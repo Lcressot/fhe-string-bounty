@@ -1,4 +1,4 @@
-#![crate_name = "fhe_str"]
+#![crate_name = "fhe_string"]
 #![feature(stmt_expr_attributes)]
 
 //use clap::{App, Arg};
@@ -134,7 +134,7 @@ fn main() {
     let clear_pattern_to = FheString::from_string(&args.pattern_to);
 
     // testing the encryption/decryption process
-    assert!( client_key.decrypt_fhe_string(&encrypted_string) == args.string , "encryption / decryption of string is wrong");
+    assert!( client_key.decrypt_to_string(&encrypted_string) == args.string , "encryption / decryption of string is wrong");
 
     if args.module == "mod" || args.module == "all" {
 
@@ -293,7 +293,7 @@ fn main() {
             || server_key.to_lowercase(&encrypted_string),
             "String (encrypted) put to lower case"
             );
-        check_result( client_key.decrypt_fhe_string(&lower_case_string), args.string.to_lowercase() );
+        check_result( client_key.decrypt_to_string(&lower_case_string), args.string.to_lowercase() );
 
         // Check if clear string is well put to lower case
         let lower_case_string_clear = time_it(
@@ -308,7 +308,7 @@ fn main() {
             || server_key.to_uppercase(&encrypted_string),
             "String (encrypted) put to upper case"
             );
-        check_result( client_key.decrypt_fhe_string(&upper_case_string), args.string.to_uppercase() ); 
+        check_result( client_key.decrypt_to_string(&upper_case_string), args.string.to_uppercase() ); 
 
         display_sub_block("eq_ignore_case");
         // Check if encrypted string is equal to encrypted pattern while ignoring case
@@ -491,7 +491,7 @@ fn main() {
             || server_key.trim_start(&encrypted_string),
             "String (encrypted) trimmed start"
         );
-        check_result( client_key.decrypt_fhe_string(&trim_encrypted_string), args.string.trim_start().to_string());
+        check_result( client_key.decrypt_to_string(&trim_encrypted_string), args.string.trim_start().to_string());
 
         // Trim start clear string
         let trim_clear_string = time_it(
@@ -509,7 +509,7 @@ fn main() {
             "String (encrypted) trimmed start (reusable)"
         );
         assert!(trim_encrypted_string_reusable.is_reusable());
-        check_result( client_key.decrypt_fhe_string(&trim_encrypted_string_reusable), args.string.trim_start().to_string());
+        check_result( client_key.decrypt_to_string(&trim_encrypted_string_reusable), args.string.trim_start().to_string());
 
         display_sub_block("trim end");
 
@@ -518,7 +518,7 @@ fn main() {
             || server_key.trim_end(&encrypted_string),
             "String (encrypted) trimmed end"
         );
-        check_result( client_key.decrypt_fhe_string(&trim_encrypted_string), args.string.trim_end().to_string());
+        check_result( client_key.decrypt_to_string(&trim_encrypted_string), args.string.trim_end().to_string());
 
         // Trim end clear string
         let trim_clear_string = time_it(
@@ -535,7 +535,7 @@ fn main() {
             || server_key.trim(&encrypted_string),
             "String (encrypted) trimmed"
         );
-        check_result( client_key.decrypt_fhe_string(&trim_encrypted_string), args.string.trim().to_string());
+        check_result( client_key.decrypt_to_string(&trim_encrypted_string), args.string.trim().to_string());
 
         // Trim clear string
         let trim_clear_string = time_it(
@@ -552,7 +552,7 @@ fn main() {
             "String (encrypted) trimmed (reusable)"
         );
         assert!(trim_encrypted_string_reusable.is_reusable());
-        check_result( client_key.decrypt_fhe_string(&trim_encrypted_string_reusable), args.string.trim().to_string());
+        check_result( client_key.decrypt_to_string(&trim_encrypted_string_reusable), args.string.trim().to_string());
 
         // Trim clear string
         let trim_clear_string_reusable = time_it(
@@ -577,14 +577,14 @@ fn main() {
             match args.string.strip_prefix(&args.pattern) {
                 Some(string) => {
                     match strip_pattern_from_string.is_encrypted(){
-                        true => check_result( client_key.decrypt_fhe_string(&strip_pattern_from_string), string.to_string() ),
+                        true => check_result( client_key.decrypt_to_string(&strip_pattern_from_string), string.to_string() ),
                         false => check_result( strip_pattern_from_string.to_string(), string.to_string() )
                     };
                     check_result( client_key.decrypt_bool(&stripped), true);
                 },
                 None => {
                     match strip_pattern_from_string.is_encrypted(){
-                        true => check_result( client_key.decrypt_fhe_string(&strip_pattern_from_string), args.string.clone() ),
+                        true => check_result( client_key.decrypt_to_string(&strip_pattern_from_string), args.string.clone() ),
                         false => check_result( strip_pattern_from_string.to_string(), args.string.clone() )
                     };
                     check_result( client_key.decrypt_bool(&stripped), false);
@@ -609,14 +609,14 @@ fn main() {
             match args.string.strip_prefix(&args.pattern) {
                 Some(string) => {
                     match strip_pattern_from_string.is_encrypted(){
-                        true => check_result( client_key.decrypt_fhe_string(&strip_pattern_from_string), string.to_string() ),
+                        true => check_result( client_key.decrypt_to_string(&strip_pattern_from_string), string.to_string() ),
                         false => check_result( strip_pattern_from_string.to_string(), string.to_string() )
                     };
                     check_result( client_key.decrypt_bool(&stripped), true);
                 },
                 None => {
                     match strip_pattern_from_string.is_encrypted(){
-                        true => check_result( client_key.decrypt_fhe_string(&strip_pattern_from_string), args.string.clone() ),
+                        true => check_result( client_key.decrypt_to_string(&strip_pattern_from_string), args.string.clone() ),
                         false => check_result( strip_pattern_from_string.to_string(), args.string.clone() )
                     };
                     check_result( client_key.decrypt_bool(&stripped), false);
@@ -640,14 +640,14 @@ fn main() {
             match args.string.strip_suffix(&args.pattern) {
                 Some(string) => {
                     match strip_pattern_from_string.is_encrypted(){
-                        true => check_result( client_key.decrypt_fhe_string(&strip_pattern_from_string), string.to_string() ),
+                        true => check_result( client_key.decrypt_to_string(&strip_pattern_from_string), string.to_string() ),
                         false => check_result( strip_pattern_from_string.to_string(), string.to_string() )
                     };
                     check_result( client_key.decrypt_bool(&stripped), true); 
                 },
                 None => {
                     match strip_pattern_from_string.is_encrypted(){
-                        true => check_result( client_key.decrypt_fhe_string(&strip_pattern_from_string), args.string.clone() ),
+                        true => check_result( client_key.decrypt_to_string(&strip_pattern_from_string), args.string.clone() ),
                         false => check_result( strip_pattern_from_string.to_string(), args.string.clone() )
                     };
                     check_result( client_key.decrypt_bool(&stripped), false);
@@ -678,7 +678,7 @@ fn main() {
             // then check the fields
             for i in 0..actual_n_fields{
                 let clear_split = split_vec_clear[i].clone();
-                let decrypted_split = client_key.decrypt_fhe_string(&split_vec[i]);
+                let decrypted_split = client_key.decrypt_to_string(&split_vec[i]);
 
                 let clear_split_msg = "CLEAR: \"".to_string() + &clear_split + &"\"";
                 let decrypted_split_msg = "FHE: \"".to_string() + &decrypted_split + &"\"";
@@ -1259,7 +1259,7 @@ fn main() {
 
         let check_replace = |fhe_string: &FheString, ground_truth: &String|{
             if fhe_string.is_encrypted(){
-                check_result( client_key.decrypt_fhe_string(&fhe_string), ground_truth.clone());
+                check_result( client_key.decrypt_to_string(&fhe_string), ground_truth.clone());
             }else{
                 check_result( fhe_string.to_string(), ground_truth.clone());
             }
@@ -1328,7 +1328,7 @@ fn main() {
 
         let check_replacen = |fhe_string: &FheString, ground_truth: &String|{
             if fhe_string.is_encrypted(){
-                check_result( client_key.decrypt_fhe_string(&fhe_string), ground_truth.clone());
+                check_result( client_key.decrypt_to_string(&fhe_string), ground_truth.clone());
             }else{
                 check_result( fhe_string.to_string(), ground_truth.clone());
             }
@@ -1409,7 +1409,7 @@ fn main() {
             || server_key.repeat(&encrypted_string, args.n),
             "String (encrypted) repeat"
         );
-        check_result(&client_key.decrypt_fhe_string(&repeat_encrypted_string), &repeat_ground_truth);
+        check_result(&client_key.decrypt_to_string(&repeat_encrypted_string), &repeat_ground_truth);
 
         display_block("repeat_reusable");
 
@@ -1425,9 +1425,8 @@ fn main() {
             "String (encrypted) repeat_reusable"
         );
         assert!(repeat_reusable_encrypted_string.is_reusable());
-        check_result(&client_key.decrypt_fhe_string(&repeat_reusable_encrypted_string), &repeat_ground_truth);        
+        check_result(&client_key.decrypt_to_string(&repeat_reusable_encrypted_string), &repeat_ground_truth);        
 
     }
-
 
 }

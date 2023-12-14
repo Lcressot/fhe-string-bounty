@@ -1,6 +1,7 @@
 //! ServerKey implementation of trimming and stripping functions for ciphertext::FheString objects
 
 use tfhe::integer::ciphertext::{RadixCiphertext, IntegerCiphertext};
+use tfhe::integer::BooleanBlock;
 use rayon::prelude::*;
 use std::cmp;
 use crate::ciphertext::{FheString};
@@ -27,7 +28,7 @@ impl ServerKey{
         let len_minus_true_len = self.key.sub_parallelized(&len_encrypted, &true_len);
 
         let index_is_len_minus_true_len: Vec<RadixCiphertext> = (0..len).into_par_iter().map(
-            |index| self.key.scalar_eq_parallelized(&len_minus_true_len, index as u64)
+            |index| self.key.scalar_eq_parallelized(&len_minus_true_len, index as u64).into_radix(1, &self.key)
         ).collect();
 
         // now left shift the fhe_string with the vector index_is_len_minus_true_len and tell it is reusable
@@ -44,7 +45,7 @@ impl ServerKey{
 
         // first, compute where the characters are not empty
         let mut first_non_zero: Vec<RadixCiphertext> = (0..fhe_string.len()).into_par_iter().map(
-            |index| self.key.scalar_ne_parallelized(fhe_string.fhe_chars()[index].unwrap(), 0 as u64)
+            |index| self.key.scalar_ne_parallelized(fhe_string.fhe_chars()[index].unwrap(), 0 as u64).into_radix(1, &self.key)
         ).collect();
 
         // then, keep only to one the first non zero character
@@ -86,10 +87,7 @@ impl ServerKey{
                 let mut cum_sum_ne_index: Vec<RadixCiphertext> = (0..cum_sum.len()).into_par_iter().map(
                     |index| {
                         if index >= (index_split/step)*min_len_pattern { // prevent computing if not necessary
-                            let mut res = self.key.scalar_ne_parallelized(&cum_sum[index], index_split as u64);
-                            let len = res.blocks().len()-1;
-                            self.key.trim_radix_blocks_msb_assign(&mut res, len);
-                            res
+                            self.key.scalar_ne_parallelized(&cum_sum[index], index_split as u64).into_radix(1, &self.key)
                         }else{
                             self.make_trivial_bool(false)
                         }
@@ -341,7 +339,7 @@ impl ServerKey{
                 self.key.create_trivial_radix(2u8, 1)
             };
 
-            let is_string_empty = self.is_empty(fhe_string);
+            let is_string_empty = BooleanBlock::convert::<RadixCiphertext>(&self.is_empty(fhe_string), &self.key);
 
             encrypted_len_empty = self.key.if_then_else_parallelized(
                 &is_string_empty,
@@ -438,7 +436,7 @@ impl ServerKey{
                     // for other indices, increase cum_sum when we have either a 1 with a 0 before, or a 0 with a one before
                     // and if we are not above padding
                     if fhe_string.is_padded(){
-                        let is_not_padding = self.key.scalar_gt_parallelized(&encrypted_string_length, index as u64);
+                        let is_not_padding = self.key.scalar_gt_parallelized(&encrypted_string_length, index as u64).into_radix(1, &self.key);
                         let mut sum = self.key.bitxor_parallelized(&contains_at_index_vec[index], &contains_at_index_vec[index-1]);
                         self.key.bitand_assign_parallelized(&mut sum, &is_not_padding);
                         self.key.extend_radix_with_trivial_zero_blocks_msb_assign(&mut sum, n_blocks-1);
@@ -466,8 +464,8 @@ impl ServerKey{
                 pattern_start_index_plus_pattern_length = pattern_start_index_plus_pattern_length_; // keep value outside scope
 
                 let (mut pattern_just_ended, mut pattern_ended) = rayon::join(
-                    || self.key.scalar_eq_parallelized(&pattern_start_index_plus_pattern_length, index as u64),
-                    || self.key.scalar_le_parallelized(&pattern_start_index_plus_pattern_length, index as u64)
+                    || self.key.scalar_eq_parallelized(&pattern_start_index_plus_pattern_length, index as u64).into_radix(1, &self.key),
+                    || self.key.scalar_le_parallelized(&pattern_start_index_plus_pattern_length, index as u64).into_radix(1, &self.key)
                 );
 
                 // these two values only make sense if a pattern has started already
@@ -480,8 +478,9 @@ impl ServerKey{
                 // a new pattern starts if we have a first one or a one with pattern_ended
                 let one_and_pattern_ended = self.key.bitand_parallelized(&contains_at_index_vec[index], &pattern_ended);
                 let pattern_starts = self.key.bitor_parallelized(&is_first_one, &one_and_pattern_ended);
+                let bool_pattern_starts = BooleanBlock::convert::<RadixCiphertext>(&pattern_starts, &self.key);
                 let encrypted_index = self.key.create_trivial_radix(index as u64, n_blocks);
-                pattern_start_index = self.key.if_then_else_parallelized(&pattern_starts, &encrypted_index, &pattern_start_index);
+                pattern_start_index = self.key.if_then_else_parallelized(&bool_pattern_starts, &encrypted_index, &pattern_start_index);
 
                 // compute the cumulated sum value to separate fields
                 // (1) The cumulated sum is increased of 1 if a new (non overlapping) pattern starts (if not inclusive)
@@ -525,18 +524,22 @@ impl ServerKey{
         // for all values that are >= 2 in order to prevent having an empty substring at start
         if ascii_whitespace{
             let sub_2_if_first_is_whitespace = self.key.if_then_else_parallelized(
-                    &contains_at_index_vec[0],
+                    &BooleanBlock::convert::<RadixCiphertext>(&contains_at_index_vec[0], &self.key),
                     &self.key.create_trivial_radix(2u8, n_blocks),
                     &self.key.create_trivial_zero_radix(n_blocks)
                 );
             
             cum_sum = cum_sum.into_par_iter().map(
-                |ele|{
+                |sum|{
                     let (is_ge_2, value_minus_2) =  rayon::join(
-                        || self.key.scalar_ge_parallelized(&ele, 2u64),
-                        || self.key.sub_parallelized(&ele, &sub_2_if_first_is_whitespace)
+                        || self.key.scalar_ge_parallelized(&sum, 2u64),
+                        || self.key.sub_parallelized(&sum, &sub_2_if_first_is_whitespace)
                     );
-                    self.key.if_then_else_parallelized(&is_ge_2, &value_minus_2, &ele)
+                    self.key.if_then_else_parallelized(
+                    	&is_ge_2,
+                    	&value_minus_2,
+                    	&sum
+                    )
                 }
             ).collect();
         }      
@@ -593,7 +596,7 @@ impl ServerKey{
             let mut pattern_ends_string = self.key.eq_parallelized(
                 &pattern_start_index_plus_pattern_length,
                 &encrypted_string_length
-            );
+            ).into_radix(1, &self.key);
             self.extend_equally(&mut number_of_fields, &mut pattern_ends_string);
             self.key.sub_assign_parallelized(&mut number_of_fields, &pattern_ends_string);
         }
@@ -617,7 +620,7 @@ impl ServerKey{
                 self.key.create_trivial_radix(2u8, 1)
             };
 
-            let is_string_empty = self.is_empty(fhe_string);
+            let is_string_empty = BooleanBlock::convert::<RadixCiphertext>(&self.is_empty(fhe_string), &self.key);
 
             number_of_fields = self.key.if_then_else_parallelized(
                 &is_string_empty,
@@ -631,7 +634,7 @@ impl ServerKey{
 
         // the special case where pattern is the empty string "" with padding has to be
         // mixed with the other results because we don't know if pattern is empty or not in this case
-        let is_pattern_empty = self.key.scalar_eq_parallelized(&encrypted_pattern_length, 0u8);
+        let is_pattern_empty = self.key.scalar_eq_parallelized(&encrypted_pattern_length, 0u8).into_radix(1, &self.key);
 
         let empty_fhe_string = FheString::empty_encrypted();
         let final_results = (0..cmp::max(split_results.len(),results_from_empty.len())).into_par_iter().map(
@@ -648,7 +651,7 @@ impl ServerKey{
         // update number_of_fields if the pattern is empty and / or the string is empty
 
         let (mut is_string_empty, mut not_is_pattern_empty) = rayon::join(
-            || self.key.scalar_eq_parallelized(&encrypted_string_length, 0u8),
+            || self.key.scalar_eq_parallelized(&encrypted_string_length, 0u8).into_radix(1, &self.key),
             || self.not(&is_pattern_empty)
         );
 
@@ -657,7 +660,7 @@ impl ServerKey{
 
         (number_of_fields, _) = rayon::join(
             ||self.key.if_then_else_parallelized(
-                &is_pattern_empty,
+                &BooleanBlock::convert::<RadixCiphertext>(&is_pattern_empty, &self.key),
                 &encrypted_len_empty,
                 &number_of_fields
             ),
@@ -674,7 +677,7 @@ impl ServerKey{
 
         self.extend_equally(&mut number_of_fields_if_string_empty, &mut number_of_fields);
         number_of_fields = self.key.if_then_else_parallelized(
-            &is_string_empty,
+            &BooleanBlock::convert::<RadixCiphertext>(&is_string_empty, &self.key),
             &number_of_fields_if_string_empty,
             &number_of_fields
         );

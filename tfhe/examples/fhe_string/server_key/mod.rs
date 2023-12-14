@@ -5,6 +5,7 @@ use tfhe::integer::server_key::ServerKey as IntegerServerKey;
 use serde::{Serialize, Deserialize};
 
 use tfhe::integer::ciphertext::{RadixCiphertext, IntegerCiphertext};
+use tfhe::integer::BooleanBlock;
 use rayon::prelude::*;
 use std::cmp;
 
@@ -161,7 +162,7 @@ impl ServerKey{
                     zero.clone()
                 }else{
                     self.key.if_then_else_parallelized(
-                        &vec_where[index],
+                        &BooleanBlock::convert::<RadixCiphertext>(&vec_where[index], &self.key),
                         &zero,
                         fhe_string.fhe_chars()[index].unwrap()
                     )
@@ -199,7 +200,7 @@ impl ServerKey{
         // compute which characters are non zero in parallel with rayon par_iter parallel iterator
         let greater_than_zero = self.apply_parallelized_vec(
             fhe_string.fhe_chars(),
-            |c: &FheAsciiChar| self.key.scalar_ne_parallelized(c.unwrap(), 0u8)
+            |c: &FheAsciiChar| self.key.scalar_ne_parallelized(c.unwrap(), 0u8).into_radix(1, &self.key)
             );        
 
         // sum up the number of ones in greater_than_zero
@@ -231,7 +232,7 @@ impl ServerKey{
         // compute which characters are zero
         let equal_zero = self.apply_parallelized_vec(
             &fhe_string.fhe_chars()[start..end],
-            |c: &FheAsciiChar| self.key.scalar_eq_parallelized(c.unwrap(), 0u8)
+            |c: &FheAsciiChar| self.key.scalar_eq_parallelized(c.unwrap(), 0u8).into_radix(1, &self.key)
             );
 
         // return true if all are one
@@ -254,7 +255,7 @@ impl ServerKey{
             fhe_chars_1,
             fhe_chars_2,
             |(fhe_c_1, fhe_c_2): (&FheAsciiChar, &FheAsciiChar)|
-                self.key.eq_parallelized(fhe_c_1.unwrap(), fhe_c_2.unwrap())
+                self.key.eq_parallelized(fhe_c_1.unwrap(), fhe_c_2.unwrap()).into_radix(1, &self.key)
             );
 
         // check if all equalities are true with a rayon parallized bitand reduction
@@ -273,7 +274,7 @@ impl ServerKey{
             fhe_chars,
             chars,
             |(fhe_c, c): (&FheAsciiChar, &char)|
-                self.key.scalar_eq_parallelized(fhe_c.unwrap(), (*c) as u8)
+                self.key.scalar_eq_parallelized(fhe_c.unwrap(), (*c) as u8).into_radix(1, &self.key)
             );
 
         // check if all equalities are true with a rayon parallized bitand reduction
@@ -388,10 +389,10 @@ impl ServerKey{
         // to the required number of blocks to be able to sum up
         let mut res_vec: Vec<RadixCiphertext> = fhe_string.fhe_chars().par_iter().map(
             |fhe_char|{
-                let mut res = self.key.scalar_ne_parallelized(fhe_char.unwrap(), 0u8);
+                let mut res = self.key.scalar_ne_parallelized(fhe_char.unwrap(), 0u8).into_radix(1, &self.key);
                 // extend to the appropriate number of blocks if necessary
                 if n_blocks > NUMBER_OF_BLOCKS{
-                    self.key.extend_radix_with_trivial_zero_blocks_msb_assign(&mut res, n_blocks - NUMBER_OF_BLOCKS);
+                    self.key.extend_radix_with_trivial_zero_blocks_msb(&mut res, n_blocks - NUMBER_OF_BLOCKS);
                 }
                 res                
         }).collect();
@@ -418,7 +419,7 @@ impl ServerKey{
                  // index is in range 0..len-n-1, so real_index = index+n-1 is in range n-1..len as we want
                  let real_index = index+n-1;
                  let is_equal_n = self.key.scalar_eq_parallelized(number, n as u64);
-                 self.key.mul_parallelized(fhe_string.fhe_chars()[real_index].unwrap(), &is_equal_n)
+                 self.key.mul_parallelized(fhe_string.fhe_chars()[real_index].unwrap(), &is_equal_n.into_radix(1, &self.key))
             }).collect();     
 
             // sum the vec to get the value
@@ -480,25 +481,26 @@ impl ServerKey{
         fhe_str_1: &FheString,
         fhe_str_2: &FheString
     )-> FheString {
+        let bool_condition = BooleanBlock::convert::<RadixCiphertext>(&condition, &self.key);
         assert!(fhe_str_1.is_encrypted() && fhe_str_2.is_encrypted(), "both fhe_strings should be encrypted");
         let zero_cst = self.key.create_trivial_zero_radix(NUMBER_OF_BLOCKS);
         let values: Vec<RadixCiphertext> = (0..cmp::max(fhe_str_1.len(),fhe_str_2.len())).into_par_iter().map(
             |index|{
                 if index >= fhe_str_1.len(){
                     self.key.if_then_else_parallelized(
-                        condition,
+                        &bool_condition,
                         &zero_cst,
                         fhe_str_2.fhe_chars()[index].unwrap()
                     )
                 }else if index >= fhe_str_2.len(){
                     self.key.if_then_else_parallelized(
-                        condition,
+                        &bool_condition,
                         fhe_str_1.fhe_chars()[index].unwrap(),
                         &zero_cst
                     )
                 }else{
                     self.key.if_then_else_parallelized(
-                        condition,
+                        &bool_condition,
                         fhe_str_1.fhe_chars()[index].unwrap(),
                         fhe_str_2.fhe_chars()[index].unwrap()
                     )

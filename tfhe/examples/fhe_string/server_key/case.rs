@@ -1,6 +1,7 @@
 //! ServerKey implementation of casing functions to process FheString objects
 
 use tfhe::integer::ciphertext::RadixCiphertext;
+use tfhe::integer::BooleanBlock;
 use rayon::prelude::*;
 
 use crate::ciphertext::FheString;
@@ -30,11 +31,11 @@ impl ServerKey{
         let (is_ge_65, is_le_90) = rayon::join(
         || self.apply_parallelized_vec(
             fhe_string.fhe_chars(),
-            |c| self.key.scalar_ge_parallelized(c.unwrap(), 65u8)
+            |c| self.key.scalar_ge_parallelized(c.unwrap(), 65u8).into_radix(1, &self.key)
         ),
         || self.apply_parallelized_vec(
             fhe_string.fhe_chars(),
-            |c| self.key.scalar_le_parallelized(c.unwrap(), 90u8)
+            |c| self.key.scalar_le_parallelized(c.unwrap(), 90u8).into_radix(1, &self.key)
         ));
 
         // trivially encrypt the number 32 :
@@ -76,11 +77,11 @@ impl ServerKey{
         let (is_ge_97, is_le_122) = rayon::join(
         || self.apply_parallelized_vec(
             fhe_string.fhe_chars(),
-            |c| self.key.scalar_ge_parallelized(c.unwrap(), 97u8)
+            |c| self.key.scalar_ge_parallelized(c.unwrap(), 97u8).into_radix(1, &self.key)
         ),
         || self.apply_parallelized_vec(
             fhe_string.fhe_chars(),
-            |c| self.key.scalar_le_parallelized(c.unwrap(), 122u8)
+            |c| self.key.scalar_le_parallelized(c.unwrap(), 122u8).into_radix(1, &self.key)
         ));
 
         // trivially encrypt the number 32 :
