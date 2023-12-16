@@ -1,0 +1,13 @@
+[package]
+name = "fhe-string"
+version = "0.1.0"
+edition = "2023"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+tfhe = { version = "0.4.0", features = [ "boolean", "shortint", "integer", "aarch64-unix" ] }
+serde = { version = "1.0", features = ["derive"] }
+clap = { version = "4.4.6", features = ["derive"] }
+rayon = "1"
+colored = "2.0"
