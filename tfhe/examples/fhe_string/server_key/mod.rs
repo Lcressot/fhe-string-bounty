@@ -1,17 +1,19 @@
 //! The server_key module implements a wrapper for a tfhe::integer::server_key::ServerKey object
 //! It allows to process ciphertext::FheString objects
 
-use tfhe::integer::server_key::ServerKey as IntegerServerKey;
 use serde::{Serialize, Deserialize};
 
+use tfhe::integer::server_key::ServerKey as IntegerServerKey;
 use tfhe::integer::ciphertext::{RadixCiphertext, IntegerCiphertext};
 use tfhe::integer::BooleanBlock;
 use rayon::prelude::*;
 use std::cmp;
+use num_cpus;
 
 use crate::ciphertext::FheString;
 use crate::ciphertext::FheAsciiChar;
 use crate::NUMBER_OF_BLOCKS;
+
 
 #[derive(Serialize, Deserialize, Clone)]
 pub struct ServerKey{
@@ -371,6 +373,54 @@ impl ServerKey{
     }
 
 
+    /// Recursive part of the cum_sum_parallel function
+    pub fn cum_sum_parallel_rec(&self, vec: &[RadixCiphertext], depth: usize, max_depth: usize) -> Vec::<RadixCiphertext>{
+        let len = vec.len();
+        let mut cum_sum = Vec::<RadixCiphertext>::with_capacity(len);
+
+        // end recursion if len is 1 or 2
+        if len == 1{
+            cum_sum.push(vec[0].clone());
+            return cum_sum;
+        }
+        if len == 2 {
+            cum_sum.push(vec[0].clone());
+            cum_sum.push(self.key.add_parallelized(&vec[0], &vec[1]));
+            return cum_sum;
+        }
+
+        // also end recursion if depth >= max_depth, and compute iteratively
+        if depth >= max_depth {
+            let mut cum_sum = Vec::<RadixCiphertext>::with_capacity(len);
+            cum_sum.push(vec[0].clone());
+            for i in 1..len {
+                cum_sum.push(self.key.add_parallelized(&vec[i], &cum_sum[i-1]));
+            }
+            return cum_sum;
+        }
+
+        // else, we will make a parallelized recursion and split the work in two halves
+        let middle_index = len/2;
+        let (mut cum_sum, mut cum_sum_2) = rayon::join(
+            || self.cum_sum_parallel_rec(&vec[0..middle_index], depth+1, max_depth),
+            || self.cum_sum_parallel_rec(&vec[middle_index..len], depth+1, max_depth)
+        );
+
+        let mut cum_sum_2_add: Vec::<RadixCiphertext> = cum_sum_2.par_iter().map(
+            |value| self.key.add_parallelized(value, &cum_sum[middle_index-1])
+        ).collect();
+
+        cum_sum.append(&mut cum_sum_2_add);
+        cum_sum
+    }
+
+    /// Compute a cumulated sum with nested (recursive) parallel computation
+    pub fn cum_sum_parallel(&self, vec: &[RadixCiphertext]) -> Vec::<RadixCiphertext>{
+        // the maximum recursion depth will be log2(num_cpus)
+        // so that we exploit no more than the maximum number of cpus available
+        self.cum_sum_parallel_rec(vec, 0, (num_cpus::get() as f64).log2().ceil() as usize)
+    }
+
     /// Make an encrypted FheString reusable. All null characters (if any) that are present in the middle of the string
     /// are moved at the end of the sequence.
     /// This function is very greedy and should be used only if required, generally so as to reuse a FheString
@@ -387,23 +437,18 @@ impl ServerKey{
 
         // first, compute which characters are not null characters, and extend the result
         // to the required number of blocks to be able to sum up
-        let mut res_vec: Vec<RadixCiphertext> = fhe_string.fhe_chars().par_iter().map(
+        let mut non_zero: Vec<RadixCiphertext> = fhe_string.fhe_chars().par_iter().map(
             |fhe_char| self.key.scalar_ne_parallelized(fhe_char.unwrap(), 0u8).into_radix(n_blocks, &self.key)
         ).collect();
 
         // then, let's associate each nth non null character with the index n in nth_indices
-        // this is a cumulated sum of res_vec, necessarily sequential
-        let mut nth_indices = Vec::<RadixCiphertext>::with_capacity(len);
-        nth_indices.push(res_vec[0].clone());
-
-        for i in 1..len {
-            nth_indices.push( self.key.add_parallelized(&res_vec[i], &nth_indices[i-1]) );
-        }
+        // this is a cumulated sum of non_zero     
+        let mut nth_indices = self.cum_sum_parallel(&non_zero);
 
         // Now, we can querry the value of each nth non null character with sum( (nth_indices==n) * fhe_chars)
         // and assign it to the (n-1)th value of our tidy FheString (n-1 because we start at 0)
         // let's use a nested parallelization for faster computation
-        let tidy_vec = (1..=len).into_par_iter().map(
+        let reusable_vec = (1..=len).into_par_iter().map(
          | n |{
 
             // first fill a vector with (nth_indices==n) * fhe_chars to be summed up
@@ -422,8 +467,8 @@ impl ServerKey{
             })
         }).collect();
 
-        // now, create a reusable and padded FheString from res_vec and return it
-        FheString::from_encrypted(tidy_vec, true, true)
+        // now, create a reusable and padded FheString from reusable_vec and return it
+        FheString::from_encrypted(reusable_vec, true, true)
     }    
 
 
