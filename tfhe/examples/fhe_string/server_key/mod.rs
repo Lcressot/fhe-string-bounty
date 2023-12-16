@@ -388,14 +388,8 @@ impl ServerKey{
         // first, compute which characters are not null characters, and extend the result
         // to the required number of blocks to be able to sum up
         let mut res_vec: Vec<RadixCiphertext> = fhe_string.fhe_chars().par_iter().map(
-            |fhe_char|{
-                let mut res = self.key.scalar_ne_parallelized(fhe_char.unwrap(), 0u8).into_radix(1, &self.key);
-                // extend to the appropriate number of blocks if necessary
-                if n_blocks > NUMBER_OF_BLOCKS{
-                    self.key.extend_radix_with_trivial_zero_blocks_msb(&mut res, n_blocks - NUMBER_OF_BLOCKS);
-                }
-                res                
-        }).collect();
+            |fhe_char| self.key.scalar_ne_parallelized(fhe_char.unwrap(), 0u8).into_radix(n_blocks, &self.key)
+        ).collect();
 
         // then, let's associate each nth non null character with the index n in nth_indices
         // this is a cumulated sum of res_vec, necessarily sequential
@@ -414,12 +408,10 @@ impl ServerKey{
 
             // first fill a vector with (nth_indices==n) * fhe_chars to be summed up
             // start at index n-1 because we cannot find nth_index==n below n-1
-            let to_add_vec : Vec::<RadixCiphertext> = nth_indices[n-1..len].par_iter().enumerate().map(
-                |(index, number)| {
-                 // index is in range 0..len-n-1, so real_index = index+n-1 is in range n-1..len as we want
-                 let real_index = index+n-1;
-                 let is_equal_n = self.key.scalar_eq_parallelized(number, n as u64);
-                 self.key.mul_parallelized(fhe_string.fhe_chars()[real_index].unwrap(), &is_equal_n.into_radix(1, &self.key))
+            let to_add_vec : Vec::<RadixCiphertext> = (n-1..len).into_par_iter().map(
+                |index| {
+                 let is_equal_n = self.key.scalar_eq_parallelized(&nth_indices[index], n as u64);
+                 self.key.mul_parallelized(fhe_string.fhe_chars()[index].unwrap(), &is_equal_n.into_radix(1, &self.key))
             }).collect();     
 
             // sum the vec to get the value
